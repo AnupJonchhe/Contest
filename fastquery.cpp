@@ -158,20 +158,13 @@ char line[MAX_LINE];
 VI vall[NUM_Q];
 
 int parse(const VS &vs, int offset) {
-  DB(vs[0]);
-  DB(offset)
   int q = SIZE(vs);
   REP(i, q){
-    DB(vs[i]);
     vall[i+offset].reserve(100);
     int pos = 0;
     for (auto &c: vs[i]) {
-      DB(c);
-      DB(vall[i+offset]);
-      DB(line);
       if (c == '\t') {
         line[pos] = 0;
-        DB(line);
         vall[offset+i].PB(gene_map[atoi(line)]);        
         pos = 0;
       } else line[pos++] = c;
@@ -241,7 +234,6 @@ class Solver{
   public:
   void solve_sig2(int bid, int sig, double *output, int q) {
     if (sig < 10 || sig % 1000 == 0) DB(sig);
-    //DB(sig);
     short int *order = tab_order[bid];
     float *cur_sig = tab_sig[bid];
 
@@ -493,8 +485,38 @@ void thread_writer(int q) {
   fclose(f);
 }
 
+VS qheader;
+VS qdesc;
+
+VS read_sigids(string filename){
+  FILE *f = fopen(filename.c_str(), "r");
+  VS res;
+  while(fgets(line, MAX_LINE, f)){
+    int pos = 0;
+    while(line[pos] != '\n') pos++;
+    line[pos] = 0;
+    res.PB(line);
+  }
+  return res;
+}
+
 void thread_gct_writer(int q) {
   FILE *f = fopen(OUT_FILE.c_str(), "w");
+  fprintf(f, "#1.3\n%d\t%d\t%d\t%d\n", CALC_SIG, q, 1, 1);
+  fprintf(f, "id\tsig_desc");
+  for (int i = 0; i < q; i++){
+    string trim = qheader[i].substr(0,qheader[i].size()-3);
+    fprintf(f, "\t%s", trim.c_str());
+  }
+  fprintf(f,"\n");
+
+  fprintf(f, "query_desc\tna");
+  for (int i = 0; i < q; i++){
+    fprintf(f, "\t%s", qdesc[i].c_str());
+  }
+  fprintf(f,"\n"); 
+  //load sigid info
+  VS sigids = read_sigids((PATH+"/sigids.grp"));
   while (writer_pos < CALC_SIG) {
     {
       std::unique_lock<std::mutex> l(lock_writer);
@@ -502,9 +524,9 @@ void thread_gct_writer(int q) {
     }
     if (writer_pos % 1000 == 0) DB(writer_pos);
     st_write.start();
+    fprintf(f, "%s\t ", sigids[writer_pos].c_str());
     for (int i = 0; i < q; i++){
-      if (i) fprintf(f, "\t");
-      fprintf(f, "%.6lf", response[writer_pos * q + i]);
+      fprintf(f, "\t%.4lg", response[writer_pos * q + i]);
     }
     fprintf(f, "\n");    
 //int x = fwrite(response + writer_pos * q, sizeof(float), q, f);
@@ -576,16 +598,20 @@ void getWTKScomb(vector <string> up, vector <string> down) {
   }
 }
 
-
 VS load_queries(string filename) {
   FILE *f = fopen(filename.c_str(), "r");
   VS res;
   while (fgets(line, MAX_LINE, f)) {
     int pos = 0;
     while (line[pos] != '\t') pos++;
-    pos++;
+    line[pos++] = 0;
+    qheader.PB(line);
+    int headloc = pos;
+    //store row header
     while (line[pos] != '\t') pos++;
-    pos++;
+    line[pos++] = 0;
+    qdesc.PB(line+headloc);
+    //store row desc
     assert(line[pos] != '\t');
     assert(isdigit(line[pos]));
     res.PB(line+pos);
